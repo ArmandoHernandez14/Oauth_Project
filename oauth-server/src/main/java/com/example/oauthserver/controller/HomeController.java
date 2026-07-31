@@ -1,4 +1,4 @@
-package com.example.oauth_demo;
+package com.example.oauthserver;
 
 public class HomeController {
     
