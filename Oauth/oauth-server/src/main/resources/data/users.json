@@ -1,0 +1,11 @@
+[ {
+  "id" : 1,
+  "username" : "john",
+  "password" : "$2a$10$....",
+  "role" : "ROLE_USER"
+}, {
+  "id" : 2,
+  "username" : "test",
+  "password" : "$2a$10$237/9BWTr7y2XcxVSizzQOw/mZOEmhFO7Mq0u4dOMiUy9QpsyYejS",
+  "role" : "ROLE_USER"
+} ]
