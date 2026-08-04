@@ -1,11 +1,6 @@
 [ {
   "id" : 1,
   "username" : "john",
-  "password" : "$2a$10$....",
-  "role" : "ROLE_USER"
-}, {
-  "id" : 2,
-  "username" : "test",
-  "password" : "$2a$10$237/9BWTr7y2XcxVSizzQOw/mZOEmhFO7Mq0u4dOMiUy9QpsyYejS",
+  "password" : "$2a$10$BimGgxpKnY.rUPFjAUvZcu16zyfjYfMj4AqGlyyWsjCWBcY5DM.9a",
   "role" : "ROLE_USER"
 } ]

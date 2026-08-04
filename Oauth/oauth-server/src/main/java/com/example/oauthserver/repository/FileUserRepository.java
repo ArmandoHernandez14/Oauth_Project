@@ -92,21 +92,13 @@ public class FileUserRepository {
         return users;
 
     }
-
-
-
     public Optional<User> findByUsername(String username) {
-
         return users.stream()
                 .filter(user ->
                         user.getUsername()
                         .equals(username))
                 .findFirst();
-
     }
-
-
-
     public User save(User user) {
 
         if(user.getId() == null) {
@@ -118,21 +110,12 @@ public class FileUserRepository {
             users.add(user);
 
         }
-
-
-        else {
-
+        else {  
             delete(user);
-
             users.add(user);
-
         }
-
-
         saveUsers();
-
         return user;
-
     }
 
 
