@@ -2,18 +2,17 @@ package com.example.oauthserver.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
-
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -21,16 +20,17 @@ public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
+    private final JwtAuthenticationFilter jwtFilter;
 
-    public SecurityConfig(
-            CustomUserDetailsService userDetailsService,
-            PasswordEncoder passwordEncoder
-    ) {
+   public SecurityConfig(
+        CustomUserDetailsService userDetailsService,
+        PasswordEncoder passwordEncoder,
+        JwtAuthenticationFilter jwtFilter) {
+    this.userDetailsService = userDetailsService;
+    this.passwordEncoder = passwordEncoder;
+    this.jwtFilter = jwtFilter;
+}
 
-        this.userDetailsService = userDetailsService;
-        this.passwordEncoder = passwordEncoder;
-
-    }
 
 @Bean
 public AuthenticationProvider authenticationProvider() {
@@ -53,31 +53,42 @@ public AuthenticationProvider authenticationProvider() {
 
     }
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
-    ) throws Exception {
+@Bean
+public SecurityFilterChain securityFilterChain(
+        HttpSecurity http
+) throws Exception {
 
-        http
 
-                .csrf(csrf -> csrf.disable())
+    http
 
-                .authorizeHttpRequests(auth -> auth
+            .csrf(csrf -> csrf.disable())
 
-                        .requestMatchers("/auth/**")
+            .sessionManagement(session ->
+                    session.sessionCreationPolicy(
+                            SessionCreationPolicy.STATELESS
+                    )
+            )
+            // .authorizeHttpRequests(auth -> auth
+            // .anyRequest()
+            // .permitAll()
+            // );
+            .authorizeHttpRequests(auth -> auth
+                    .requestMatchers("/auth/**")
+                    .permitAll()
+                    .anyRequest()
+                    .authenticated()
+            );
 
-                        .permitAll()
 
-                        .anyRequest()
+    http.addFilterBefore(
+            jwtFilter,
+            UsernamePasswordAuthenticationFilter.class
+    );
 
-                        .authenticated()
 
-                )
+    return http.build();
 
-                .httpBasic(Customizer.withDefaults());
+}   // closes securityFilterChain()
 
-        return http.build();
 
-    }
-
-}
+}   // closes SecurityConfig class
