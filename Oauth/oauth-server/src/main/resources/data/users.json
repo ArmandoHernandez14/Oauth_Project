@@ -8,4 +8,9 @@
   "username" : "nick",
   "password" : "$2a$10$WHus7ymgsit1OLuN959XhObTo3d8Ad7dD0JzFWIbL2tH3VlclAbNC",
   "role" : "ROLE_USER"
+}, {
+  "id" : 3,
+  "username" : "alice",
+  "password" : "$2a$10$JLByAwCILPmTkZ.Q/rEa0OVNyt1hc/FYnrFp/epTnl/XtkSMaIiny",
+  "role" : "ROLE_USER"
 } ]
