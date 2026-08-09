@@ -1,6 +1,0 @@
-{
-    "java.project.sourcePaths": [
-        "oauth-server/main/java",
-        "oauth-server/src/main/java/com/example/oauthserver"
-    ]
-}
