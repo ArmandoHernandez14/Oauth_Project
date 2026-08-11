@@ -1,8 +1,6 @@
 package com.example.oauthserver.security;
-
 import com.example.oauthserver.entity.User;
 import com.example.oauthserver.repository.FileUserRepository;
-
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -14,9 +12,7 @@ import java.util.List;
 
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
-
     private final FileUserRepository userRepository;
-
     public CustomUserDetailsService(FileUserRepository userRepository) {this.userRepository = userRepository; }
     @Override
     public UserDetails loadUserByUsername(String username)
