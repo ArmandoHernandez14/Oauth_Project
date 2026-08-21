@@ -1,12 +1,16 @@
 package com.example.oauthserver.controller;
-import com.example.oauthserver.security.JwtService;
-import com.example.oauthserver.security.RefreshTokenService;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import com.example.oauthserver.security.CustomUserDetailsService;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.oauthserver.security.CustomUserDetailsService;
+import com.example.oauthserver.security.JwtService;
+import com.example.oauthserver.security.RefreshTokenService;
 @RestController
 @RequestMapping("/auth")
 public class LoginController {
