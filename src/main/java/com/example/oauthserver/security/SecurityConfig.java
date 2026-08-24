@@ -68,7 +68,7 @@ public SecurityFilterChain securityFilterChain(
             // .permitAll()
             // );
             .authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/auth/**")
+                    .requestMatchers("/auth/**", "/login.html", "/dashboard.html", "/*.css", "/*.js")
                     .permitAll()
                     .anyRequest()
                     .authenticated()

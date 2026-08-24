@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><title>Dashboard</title></head>
+<body>
+    <h2>Welcome</h2>
+    <p id="userInfo">Loading...</p>
+    <script>
+        async function loadUser() {
+            const token = sessionStorage.getItem('accessToken');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+            const response = await fetch('/api/me', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!response.ok) {
+                window.location.href = '/login.html';
+                return;
+            }
+            const data = await response.json();
+            document.getElementById('userInfo').innerText =
+                'Logged in as: ' + data.username;
+        }
+        loadUser();
+    </script>
+</body>
+</html>

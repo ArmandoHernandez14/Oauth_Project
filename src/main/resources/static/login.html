@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <style>
+        body { font-family: sans-serif; max-width: 400px; margin: 80px auto; }
+        input { display: block; width: 100%; margin: 8px 0; padding: 8px; }
+        button { padding: 8px 16px; }
+        #message { color: red; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Log In</button>
+    <p id="message"></p>
+
+    <script>
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (!response.ok) {
+                    document.getElementById('message').innerText = 'Login failed';
+                    return;
+                }
+
+                const data = await response.json();
+                // Store tokens for use on subsequent requests
+                sessionStorage.setItem('accessToken', data.accessToken);
+                sessionStorage.setItem('refreshToken', data.refreshToken);
+
+                window.location.href = '/dashboard.html';
+            } catch (err) {
+                document.getElementById('message').innerText = 'Error connecting to server';
+            }
+        }
+    </script>
+</body>
+</html>
