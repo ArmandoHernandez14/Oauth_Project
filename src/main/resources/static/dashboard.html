@@ -1,28 +1,138 @@
 <!DOCTYPE html>
-<html>
-<head><title>Dashboard</title></head>
+
+<html lang="en">
+
+<head>
+
+```
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>OAuth Server - Dashboard</title>
+
+<link
+    rel="stylesheet"
+    href="/style.css"
+>
+```
+
+</head>
+
 <body>
-    <h2>Welcome</h2>
-    <p id="userInfo">Loading...</p>
-    <script>
-        async function loadUser() {
-            const token = sessionStorage.getItem('accessToken');
-            if (!token) {
-                window.location.href = '/login.html';
+
+<div class="dashboard">
+
+```
+<div class="dashboard-card">
+
+    <h1>Dashboard</h1>
+
+    <p class="subtitle">
+        OAuth Server
+    </p>
+
+    <div class="user-info">
+
+        <h3>User Information</h3>
+
+        <p id="userInfo">
+            Loading...
+        </p>
+
+    </div>
+
+    <div class="api-result">
+
+        <strong>Protected API:</strong>
+
+        <p id="apiResult">
+            Loading...
+        </p>
+
+    </div>
+
+    <button
+        type="button"
+        class="secondary-button"
+        onclick="logout()"
+    >
+        Log Out
+    </button>
+
+</div>
+```
+
+</div>
+
+<script src="/auth.js"></script>
+
+<script>
+
+    requireAuth();
+
+    async function loadUser() {
+
+        try {
+
+            const response =
+                await authFetch("/api/me");
+
+            if (!response || !response.ok) {
+
+                logout();
+
                 return;
             }
-            const response = await fetch('/api/me', {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
-            if (!response.ok) {
-                window.location.href = '/login.html';
-                return;
-            }
-            const data = await response.json();
-            document.getElementById('userInfo').innerText =
-                'Logged in as: ' + data.username;
+
+            const data =
+                await response.json();
+
+            document.getElementById("userInfo")
+                .textContent =
+                "Logged in as: " +
+                data.username;
+
+        } catch (error) {
+
+            console.error(error);
+
+            logout();
         }
-        loadUser();
-    </script>
+    }
+
+    async function callProtectedApi() {
+
+        try {
+
+            const response =
+                await authFetch("/api/hello");
+
+            if (!response || !response.ok) {
+
+                logout();
+
+                return;
+            }
+
+            const data =
+                await response.text();
+
+            document.getElementById("apiResult")
+                .textContent = data;
+
+        } catch (error) {
+
+            console.error(error);
+
+            logout();
+        }
+    }
+    loadUser();
+    callProtectedApi();
+</script>
 </body>
 </html>
