@@ -1,19 +1,18 @@
 # OAuth Server
 
-A Spring Boot OAuth/JWT authentication service with local JSON file storage — built as a learning project, deployable to a Raspberry Pi K3s cluster.
-
-> **Storage note:** Users are stored in `src/main/resources/data/users.json`. This works well at `replicas: 1`, but is **not safe to scale** past a single replica — each pod would get its own independent copy of the file. See [Known Limitations](#known-limitations).
+A Spring Boot OAuth/JWT authentication service backed by PostgreSQL, deployed to a self-hosted Raspberry Pi Kubernetes (K3s) cluster. Includes a lightweight built-in web UI for registration, login, and a protected dashboard.
 
 ---
 
 ## Tech Stack
 
 - **Java 21**
-- **Spring Boot 4.1** (Web, Security, Validation)
-- **JJWT 0.12.6** (`io.jsonwebtoken`) for JWT signing/validation
-- **Jackson** for JSON file read/write and (de)serialization
-- **Docker** (multi-arch: amd64 + arm64)
-- **Kubernetes / K3s** (tested on a Raspberry Pi cluster)
+- **Spring Boot 4.1** (Web, Security, Validation, Data JPA)
+- **PostgreSQL** — persistent, shared user storage across replicas
+- **JJWT 0.12.6** (`io.jsonwebtoken`) — JWT signing/validation
+- **H2** (test scope) — in-memory database for automated tests, isolated from the real Postgres config
+- **Docker** — multi-arch builds (`linux/amd64` + `linux/arm64`) for ARM64 Raspberry Pi nodes
+- **Kubernetes / K3s** — 3-node Raspberry Pi cluster
 
 ---
 
@@ -26,9 +25,9 @@ src/main/java/com/example/oauthserver/
 │   ├── JacksonConfig.java            # ObjectMapper bean
 │   └── PasswordConfig.java           # PasswordEncoder bean (BCrypt)
 ├── entity/
-│   └── User.java                     # id, username, password, role
+│   └── User.java                     # JPA entity (id, username, password, role)
 ├── repository/
-│   └── FileUserRepository.java       # Reads/writes data/users.json
+│   └── UserRepository.java           # Spring Data JPA repository
 ├── service/
 │   └── UserService.java              # Registration logic, password hashing
 ├── security/
@@ -39,13 +38,18 @@ src/main/java/com/example/oauthserver/
 │   ├── RefreshTokenService.java      # Refresh token generation/validation
 │   └── CustomUserDetailsService.java # Loads users for Spring Security
 └── controller/
-    ├── AuthController.java           # /auth/register
-    ├── LoginController.java          # /auth/login, /auth/refresh
-    └── ProtectedApiController.java   # /api/hello, /api/me (requires a valid token)
+    ├── AuthController.java           # POST /auth/register
+    ├── LoginController.java          # POST /auth/login, /auth/refresh
+    └── ProtectedApiController.java   # GET /api/hello, /api/me (requires a valid token)
 
 src/main/resources/
 ├── application.properties
-└── data/users.json                   # User storage (created automatically on first run)
+└── static/
+    ├── login.html                    # Login form
+    ├── register.html                 # Registration form
+    ├── dashboard.html                 # Post-login landing page
+    ├── auth.js                       # Shared token/session helpers
+    └── style.css
 ```
 
 ---
@@ -57,22 +61,16 @@ src/main/resources/
 POST /auth/register
 Content-Type: application/json
 
-{
-  "username": "john",
-  "password": "yourpassword"
-}
+{ "username": "john", "password": "yourpassword" }
 ```
-Passwords are hashed with BCrypt (`PasswordConfig`) before being stored — never stored in plain text. New users are assigned `ROLE_USER` by default.
+Passwords are hashed with BCrypt before storage. New users are assigned `ROLE_USER`.
 
 ### Login
 ```
 POST /auth/login
 Content-Type: application/json
 
-{
-  "username": "john",
-  "password": "yourpassword"
-}
+{ "username": "john", "password": "yourpassword" }
 ```
 Response:
 ```json
@@ -90,9 +88,7 @@ Response:
 POST /auth/refresh
 Content-Type: application/json
 
-{
-  "refreshToken": "..."
-}
+{ "refreshToken": "..." }
 ```
 
 ### Protected endpoints
@@ -102,7 +98,17 @@ GET /api/hello   → plain text welcome message
 GET /api/me      → { "username": "...", "authorities": [...] }
 ```
 
-All other routes not under `/auth/**` require a valid access token (`SecurityConfig` permits `/auth/**` and requires authentication for `anyRequest()`).
+---
+
+## Web UI
+
+A minimal built-in UI is served directly from the same jar — no separate frontend project or build step:
+
+- **`/login.html`** — sign in, stores the returned tokens in `sessionStorage`
+- **`/register.html`** — create a new account
+- **`/dashboard.html`** — calls `/api/me` and `/api/hello` using the stored token; redirects to login if no valid session exists
+
+Since the app uses stateless JWTs (not cookies/sessions), the page shells themselves are publicly loadable — the actual protection happens client-side (`auth.js`'s `requireAuth()`/`authFetch()`) *and* is enforced server-side on the real data endpoints (`/api/me`, `/api/hello`), which correctly reject requests without a valid Bearer token. This split matters because a plain browser navigation (e.g. `window.location.href`) cannot attach a custom `Authorization` header — only JavaScript-initiated `fetch()` calls can — so gating the HTML shell itself server-side would break normal navigation for every legitimate user.
 
 ---
 
@@ -111,21 +117,23 @@ All other routes not under `/auth/**` require a valid access token (`SecurityCon
 `application.properties`:
 ```properties
 spring.application.name=oauth-server
-spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
 
-jwt.secret=ThisIsMyVeryLongSuperSecretKeyForJwtSigning1234567890
-jwt.access-expiration=3600000
-jwt.refresh-expiration=604800000
-```
-
-**Before deploying anywhere beyond your own machine**, make these environment-based instead of hardcoded, and use a real, strong secret:
-```properties
-jwt.secret=${JWT_SECRET:ThisIsMyVeryLongSuperSecretKeyForJwtSigning1234567890}
+jwt.secret=${JWT_SECRET:...}
 jwt.access-expiration=${JWT_ACCESS_EXPIRATION:3600000}
 jwt.refresh-expiration=${JWT_REFRESH_EXPIRATION:604800000}
+
+spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oauthdb}
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.datasource.password=${DB_PASSWORD:postgres}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 ```
 
-**Important:** `jwt.secret` must decode to at least 256 bits for HMAC-SHA algorithms, or the app throws `WeakKeyException` the first time a token is generated. Generate a safe one with:
+All sensitive values are environment-variable-driven with local-dev fallbacks. In Kubernetes, `JWT_SECRET` and the `DB_*` values are injected via Secrets — never hardcoded in the deployed image.
+
+**JWT secret requirement:** must decode to at least 256 bits for HMAC-SHA, or the app throws `WeakKeyException` on first token generation:
 ```bash
 openssl rand -base64 32
 ```
@@ -138,7 +146,7 @@ openssl rand -base64 32
 mvn clean package
 mvn spring-boot:run
 ```
-The app starts on `http://localhost:8080`. `data/users.json` is created automatically on first run if it doesn't already exist.
+Requires a reachable Postgres instance (local Docker container, or override `DB_HOST`/etc. as needed). Tests run against an isolated in-memory H2 database (`src/test/resources/application.properties`) and don't require Postgres to be running.
 
 ---
 
@@ -152,127 +160,101 @@ EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
-Build the jar first:
-```bash
-mvn clean package
-```
+### Multi-arch build (required for ARM64 Raspberry Pi nodes)
 
-### Multi-arch build (required for Raspberry Pi / ARM64)
-
-If building from an amd64 machine and deploying to ARM64 nodes:
 ```bash
 docker buildx create --use --name multiarch-builder
-
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t <your-dockerhub-username>/oauth-server:1.0 \
+  -t <dockerhub-username>/oauth-server:<tag> \
   --push .
 ```
-Make sure you're logged in (`docker login`) and use your **real** Docker Hub username, not a placeholder — the image reference in your Deployment YAML must match exactly.
+Always bump the tag for each new build — reusing a tag risks nodes serving stale cached images instead of pulling the new content.
 
 ---
 
-## Deploying to Kubernetes (K3s)
+## Kubernetes Deployment (K3s)
 
-### 1. Create the JWT Secret
+### Secrets
 ```bash
 kubectl create secret generic oauth-secrets \
-  --from-literal=JWT_SECRET='<a-real-256-bit-secret>' \
+  --from-literal=JWT_SECRET='<256-bit-secret>' \
   --from-literal=JWT_ACCESS_EXPIRATION='3600000' \
   --from-literal=JWT_REFRESH_EXPIRATION='604800000'
+
+kubectl create secret generic postgres-secret \
+  --from-literal=POSTGRES_DB=oauthdb \
+  --from-literal=POSTGRES_USER=oauthuser \
+  --from-literal=POSTGRES_PASSWORD='<password>'
 ```
 
-### 2. Deployment
+### Postgres (Deployment + PVC + Service)
+Runs as its own pod with persistent storage via a PVC. Exposed only internally (`ClusterIP`) as `postgres:5432`.
+
+### oauth-server (Deployment + Service)
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: oauth-server
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: oauth-server
-  template:
-    metadata:
-      labels:
-        app: oauth-server
-    spec:
-      containers:
-        - name: oauth-server
-          image: <your-dockerhub-username>/oauth-server:1.0
-          ports:
-            - containerPort: 8080
-              name: http
-          envFrom:
-            - secretRef:
-                name: oauth-secrets
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "250m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
+env:
+  - name: DB_HOST
+    value: postgres
+  - name: DB_PORT
+    value: "5432"
+  - name: DB_NAME
+    valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_DB } }
+  - name: DB_USERNAME
+    valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_USER } }
+  - name: DB_PASSWORD
+    valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_PASSWORD } }
 ```
+Exposed via a `NodePort` Service so it's reachable from the local network without port-forwarding.
 
-### 3. Service
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: oauth-service
-spec:
-  selector:
-    app: oauth-server
-  ports:
-    - name: http
-      port: 8080
-      targetPort: 8080
-  type: NodePort
-```
-`NodePort` exposes the service on every node's own IP (needed for LAN/off-cluster access). Use `ClusterIP` if it will only ever be called from inside the cluster.
-
-### 4. Apply and verify
 ```bash
+kubectl apply -f postgres-pvc.yaml
+kubectl apply -f postgres-deployment.yaml
+kubectl apply -f postgres-service.yaml
 kubectl apply -f oauth-deployment.yaml
 kubectl apply -f oauth-service.yaml
-
-kubectl get pods -o wide
-kubectl get svc oauth-service
-kubectl logs -l app=oauth-server
 ```
+
+---
+
+## Horizontal Scaling
+
+Since all replicas share the same Postgres backend, `oauth-server` scales safely:
+```bash
+kubectl scale deployment oauth-server --replicas=3
+```
+Verified under load with JMeter — 3 replicas showed ~2.4x higher throughput and roughly a third of the average response time compared to a single replica, with 0% error rate across both register and login flows.
 
 ---
 
 ## Accessing the Service
 
-**Inside the cluster:** `oauth-service:8080` (ClusterIP + internal DNS)
-
-**On your local network:**
-```
-http://<pi-lan-ip>:<nodeport>/auth/register
-```
-Get the LAN IP with `hostname -I` on the Pi, and the NodePort with `kubectl get svc oauth-service`.
-
-**From outside your network**, roughly in order of setup effort:
-- **Cloudflare Tunnel** — `cloudflared tunnel --url http://localhost:<nodeport>` gives an instant public HTTPS URL, no router config or domain required
-- **Tailscale** — private mesh network; install on the Pi and any client device (note: on macOS, client apps like Bruno need Local Network permission granted under System Settings → Privacy & Security)
-- **Router port forwarding** — exposes the Pi directly to the internet; avoid without TLS in front of it
+- **In-cluster:** `oauth-service:8080` (ClusterIP + internal DNS)
+- **Local network:** `http://<pi-static-ip>:<nodeport>/login.html`
+- **From anywhere:** a Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:<nodeport>`) provides a temporary public HTTPS URL with no router configuration or domain required
 
 ---
 
-## Checking Stored Users
+## Testing
 
-```bash
-kubectl exec -it $(kubectl get pods -l app=oauth-server -o jsonpath='{.items[0].metadata.name}') -- cat data/users.json
-```
+- **Unit/integration tests** run against H2 in-memory, isolated from the production Postgres config
+- **BDD (Cucumber)** — Gherkin feature files describing registration and login behavior in plain English, backed by Spring-Boot-integrated step definitions (`cucumber-spring`, `RANDOM_PORT` web environment)
+- **Load testing (JMeter)** — a corrected test plan generates a unique username once per iteration (via a properly-scoped JSR223 PreProcessor) and reuses it across the register→login pair, avoiding a username-mismatch bug that otherwise produces a false 100% login failure rate
 
 ---
 
-## Known Limitations
+## Known Limitations / Lessons Learned
 
-- **Single-replica only.** `users.json` lives inside each pod's own filesystem — with `replicas: 2+`, each pod keeps an independent copy, so a user registered on one pod won't be recognized by another. Migrate to a shared datastore (e.g. PostgreSQL) before scaling.
-- **No HTTPS/TLS.** The app serves plain HTTP. Any external exposure should terminate TLS in front of it (Cloudflare Tunnel does this automatically; raw port forwarding does not).
-- **403 vs. 401 on failed auth.** There's no custom `AuthenticationEntryPoint`, so Spring Security's stateless default returns `403 Forbidden` on authentication failures rather than the more conventional `401 Unauthorized`.
-- **Malformed/expired tokens on `JwtAuthenticationFilter`** should be caught explicitly (`io.jsonwebtoken.JwtException`, `UsernameNotFoundException`) so a bad token on a public route doesn't throw and get reported as a 403 — verify this is in place in `JwtAuthenticationFilter` before relying on it with real client traffic.
+- **Raspberry Pi node IP stability matters a lot.** Nodes on DHCP can silently receive a new IP after a reboot, breaking kubelet's self-registration and cascading into `NotReady` nodes and DNS failures across the cluster. All nodes now use static IPs (`nmcli`, since these Pis run NetworkManager rather than `dhcpcd`).
+- **NIC checksum offloading** on some Pi WiFi hardware can corrupt VXLAN-encapsulated UDP traffic (used by Flannel's default backend), breaking cross-node DNS resolution intermittently. Fixed via `ethtool -K eth0 tx off rx off`, made persistent through a systemd unit (`fix-checksum-offload.service`) since the setting doesn't survive reboots on its own.
+- **Postgres is a single point of failure** — one replica, no automatic failover. Acceptable for a personal/learning cluster; would need replication or a managed service for anything beyond that.
+- **No HTTPS/TLS at the app layer** — the app itself serves plain HTTP. External exposure should terminate TLS in front of it (Cloudflare Tunnel does this automatically).
+
+---
+
+## Roadmap
+
+- [ ] Add Spring Boot Actuator (`/actuator/health`) with Kubernetes liveness/readiness/startup probes, so unhealthy replicas stop receiving traffic instead of timing out silently
+- [ ] Move Postgres storage onto dedicated SSD-backed storage rather than the default SD-card-backed local-path provisioner
+- [ ] Add a proper `401` `AuthenticationEntryPoint` (currently falls back to a generic `403` on auth failures)
+- [ ] TLS termination via Ingress + cert-manager, or a persistent Cloudflare Tunnel service
